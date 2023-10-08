@@ -1,0 +1,158 @@
+#!/usr/bin/python3
+
+import sys, os, subprocess, re
+
+# Argument 1: Submission path
+# Argument 2: Tamarin path
+
+TAMARIN_VERSION = '1.8.0'
+THEORY_SPTHY_REGEX = r'^theory (\w+).*$'
+
+skeletons = {}	
+
+temp = {}
+skeletons['EncryptedDH'] =  [ "theory EncryptedDH begin"
+                            , "builtins: diffie-hellman, asymmetric-encryption, hashing"
+                            , "rule GenKey: [ Fr(~kA) ] --> [ !Key($A, ~kA),  !Pk($A, pk(~kA)), Out(pk(~kA)) ]"
+                            , 'lemma executableI: exists-trace "Ex #i A. FinishedI(A) @ i & not (Ex #j B. Compromised(B)@j)" lemma executableR: exists-trace "Ex #i B. FinishedR(B) @ i & not (Ex #j B. Compromised(B)@j)"'
+                            , 'lemma key_secrecyI: "All #i A B k. (SecretI(A, B, k) @ i & not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m))) ==> not (Ex #j. K(k) @ j)" lemma key_secrecyR: "All #i A B k. (SecretR(A, B, k) @ i & not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m))) ==> not (Ex #j. K(k) @ j)"'
+                            , 'lemma agreementR: "All #i A B k. (CommitR( B, A, k) @ i &  not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m))) ==> (Ex #j. RunningI(A, B, k) @ j & j < i)"'
+                            , 'lemma agreementI: "All #i A B k. (CommitI(A, B, k) @ i & not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m))) ==> (Ex #j. RunningR(B, A, k) @ j & j < i)"' ]
+
+skeletons['EncryptedDH2'] = [ "theory EncryptedDH2 begin"
+                            , "rule genkey: [ Fr(~kA) ] --> [ !Key($A, ~kA),   !Pk($A, pk(~kA)),  Out(pk(~kA)) ]"
+                            , 'restriction equality: "All x y #i. Eq(x,y) @i ==> x = y"'
+                            , 'lemma executableI: exists-trace "Ex #i A. FinishedI(A) @ i & not (Ex #j B. Compromised(B)@j)" lemma executableR: exists-trace "Ex #i B. FinishedR(B) @ i & not (Ex #j B. Compromised(B)@j)"' 
+                            , 'lemma key_secrecyI: "All #i A B k.  (SecretI(A, B, k) @ i &   not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m)))   ==> not (Ex #j. K(k) @ j)" lemma key_secrecyR: "All #i A B k.  (SecretR(A, B, k) @ i &   not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m)))   ==> not (Ex #j. K(k) @ j)" lemma agreementR: "All #i A B k.   (CommitR( B, A, k) @ i &    not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m)))   ==> (Ex #j. RunningI(A, B, k) @ j & j < i)" lemma agreementI: "All #i A B k.   (CommitI( A, B, k) @ i &   not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m)))  ==> (Ex #j. RunningR(B, A, k) @ j & j < i)"' ]
+
+skeletons['IKEv1'] =    [ "theory IKEv1 begin"
+                        , "rule genkey: [ Fr(~kA) ] --> [ !Key($A, ~kA), !Pk($A, pk(~kA)), Out(pk(~kA)) ]"
+                        , 'lemma executableI: exists-trace "Ex #i A. FinishedI(A) @ i & not (Ex #j B. Compromised(B)@j)" lemma executableR: exists-trace "Ex #i B. FinishedR(B) @ i & not (Ex #j B. Compromised(B)@j)"'
+                        , 'lemma key_secrecyI: "All #i A B k. (SecretI(A, B, k) @ i & not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m))) ==> not (Ex #j. K(k) @ j)" lemma key_secrecyR: "All #i A B k. (SecretR(A, B, k) @ i &   not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m))) ==> not (Ex #j. K(k) @ j)"lemma agreementR: "All #i A B k.   (CommitR( B, A, k) @ i & not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m)))    ==> (Ex #j. RunningI(A, B, k) @ j & j < i)" lemma agreementI: "All #i A B k. (CommitI( A, B, k) @ i & not ((Ex #l. Compromised(A) @ l) | (Ex #m. Compromised(B) @ m)))   ==> (Ex #j. RunningR(B, A, k) @ j & j < i)"'
+                        , 'lemma secrecy_PFS_R: " All A B k #i. SecretR(A, B, k) @i &  not ((Ex #l. (Compromised(A) @ l & l<i )) | (Ex #m. (Compromised(B) @ m & m < i)) )  ==> not (Ex #j. K(k)@j )"'
+                        , ' " All A B k #i. SecretI(A, B, k) @i &   not ((Ex #l. (Compromised(A) @ l & l<i )) | (Ex #m. (Compromised(B) @ m & m < i)) ) ==> not (Ex #j. K(k)@j )"' ]
+
+skeletons['Visa'] =     [ "rule Compromise_Card:[ !LtkCard(~PAN, ~privkCard) ] --[ Compromise(~PAN) ]->   [ Out(<~PAN, ~privkCard>) ] rule Compromise_Shared_Key:  [ !IssuedBy(~PAN, $Issuer),   !SharedKey(~PAN, ~mk) ] --[ Compromise($Issuer),   Compromise(~PAN) ]-> [ Out(~mk) ]" 
+                        , "rule Issuer_Receives_AC:    let AC = MAC(f(~mk, ATC), PDOL, ATC)         ARPC = MACprime(f(~mk, ATC), AC)        transaction = <~PAN, PDOL, ATC, AC>    in [ Recv($Terminal, $Issuer, <channelID, '1'>, transaction),      !SharedKey(~PAN, ~mk),      !IssuedBy(~PAN, $Issuer) ]  --[ Once(<~PAN, ATC, 'Issuer'>), //used in the restriction 'once'      Running($Issuer, $Terminal, <'Issuer', 'Terminal', transaction>) ]->    [ Issuer_Commits($Issuer, $Terminal, transaction, channelID, ARPC) ]rule Issuer_Commits:    let transaction = <~PAN, PDOL, ATC, AC> in    [ Issuer_Commits($Issuer, $Terminal, transaction, channelID, ARPC) ]  --[ Commit($Issuer, ~PAN, <'Card', 'Issuer', transaction>),      Commit($Issuer, $Terminal, <'Terminal', 'Issuer', transaction>),      Honest($Issuer), Honest(~PAN) ]->    [ Send($Issuer, $Terminal, <channelID, '2'>, <'ACCEPTED', ARPC>) ]" ]
+
+skeletons['OIDC'] =   [ "theory OIDC"
+                                    , "builtins: signing"
+                                    , "rule IdPgeneratesKeyPair:"
+                                    , "rule CompromiseAgent:"
+                                    , "rule ChanOut_S: [ Out_S($A,$B,x) ] --[ ChanOut_S($A,$B,x) ]-> [ Sec($A,$B,x) ] rule ChanIn_S: [ Sec($A,$B,x) ] --[ ChanIn_S($A,$B,x) ]-> [ In_S($A,$B,x) ]"
+                                    , "rule Register_User_account: [ Fr(~username), Fr(~password)] --[ Username_belongs_to(~username, $User, $Server), Only_once($User, $Server) , Is_User($User) , Is_Server($Server) , Register_User_account($User, $Server, ~username, ~password) ]-> [ !User_account($User, $Server, ~username, ~password), !PasswordLookUp($Server, ~username, ~password) ]"
+                                    , "rule User_starts:"
+                                    , "rule RP_responds:"
+                                    , "rule User_Chooses_Direct_Login:"
+                                    , "rule RP_Receives_Credentials:"
+                                    , "rule User_Chooses_OIDC:"
+                                    , "rule AuthRequest_RP: [ In(<'loginWith', $IdP>),"
+                                    , "rule AuthRequest_User:"
+                                    , "rule AuthRequest_IdP:"
+                                    , "rule User_Authenticates:"
+                                    , "rule Authentication_Response_IdP:"
+                                    , "rule Authentication_Response_User:"
+                                    , "rule RP_gets_IDToken:"
+                                    , 'restriction RP_shouldnt_be_an_IdP: "All rp #i. Not_an_IdP(rp)@i ==> not(Ex x #j. IdP_initializes(rp, x)@j)"'
+                                    , 'restriction OneAccount: " All idp u #i #j. (Only_once(u, idp)@i & Only_once(u, idp)@j) ==> (#i = #j )"'
+                                    , 'restriction IdP_initializes_Once: " All idp v u #i #j. (IdP_initializes(idp, v)@i & IdP_initializes(idp, u)@j) ==> (#i = #j & u = v)"'
+                                    , 'restriction Users_are_not_Servers: " All user #i. Is_User(user)@i ==> not (Ex #j. Is_Server(user)@j) "'
+                                    , 'lemma executableRP: exists-trace "Ex usr rp username password #i #j. ( RP_Receives_Credentials(rp, usr, username, password)@i & User_Chooses_Direct_Login(usr, rp, username, password)@j & #j<#i & not (Ex usr2 rp2 username2 password2 #j2. User_Chooses_Direct_Login(usr2, rp2, username2, password2)@j2 & not (#j = #j2)))"'
+                                    , 'lemma executable_IdP: exists-trace "Ex #i #j #k #m usr username rp idp id_token signedtoken pk_idp password nonce. (RP_gets_IDToken(rp, usr, idp, nonce, username, id_token, signedtoken, pk_idp)@i & Authentication_Response_IdP(idp, usr, rp, username, password, nonce)@m & #m<#i & Register_User_account(usr, idp, username, password)@k & User_Chooses_OIDC(usr, rp, idp, username, password)@j & #j<#m ) & ( not (Ex idp #k. Compromised(idp)@k) ) & ( All #n usr2 rp2 idp2 username2 password2. User_Chooses_OIDC(usr2, rp2, idp2, username2, password2)@n ==> #j = #n )"' ]
+
+skeletons['Protocol1'] =  [ "theory Protocol1"
+                          , "builtins: symmetric-encryption"
+                          , "rule ShareKey:"
+                          , "rule AliceSends:"
+                          , "rule BobReceivesAndSends:"
+                          , "rule AliceReceives:"
+                          , 'lemma executable: exists-trace "Ex #i #j A B ma mb. FinishedA(A, B, ma, mb)@i & FinishedB(B,A,ma,mb)@j& not (A=B)"' ]
+
+skeletons['Protocol2'] =    [ "theory Protocol2"
+                            , "builtins: symmetric-encryption, asymmetric-encryption"
+                            , "rule PubKey:"
+                            , "rule AliceSends:"
+                            , "rule BobReceivesAndSends:"
+                            , "rule AliceReceives:"
+                            , 'lemma executable: exists-trace "Ex #i #j A B ma mb.FinishedA(A, B, ma, mb)@i & FinishedB(B,A,ma,mb)@j& not (A=B)"' ]
+
+skeletons['Protocol3'] =    [ "theory Protocol3"
+                            , "functions: f/2 builtins: asymmetric-encryption, symmetric-encryption, hashing "
+                            , "rule PubKey:"
+                            , "rule AliceSendsKey:"
+                            , "rule BobReceivesKey:"
+                            , "rule AliceReceivesNb:"
+                            , "rule BobReceivesMa:"
+                            , "rule AliceReceivesMb:"
+                            , 'lemma executable: exists-trace "Ex #i #j A B ma mb. FinishedA(A, B, ma, mb)@i & FinishedB(B,A,ma,mb)@j& not (A=B)"' ]
+
+
+# Check that student provided submission path
+if len(sys.argv) < 2:
+    print('ERROR: Please provide your submission path as an argument. ')
+if len(sys.argv) < 3:
+    print('ERROR: Please provide the path to Tamarin. ')
+else :
+    submission_path = str(sys.argv[1])
+    tamarin_path = str(sys.argv[2])
+
+    #Check that Submission path exists
+    if not os.path.exists(submission_path):
+        print('ERROR: You did not provide a valid path to your submission. Please provide the path to your submission as the first argument. ')
+    else :
+        # Check that Tamarin path exists
+        if not os.path.exists(tamarin_path):
+            print("ERROR: You did not provide a valid path to Tamarin. Please provide the path to Tamarin as the second argument. You can get the path to Tamarin by the command 'which tamarin-prover'. ")
+        else :
+        
+            errors = False
+
+            # Check Tamarin version
+            version = subprocess.run([tamarin_path, '--version'], text=True, capture_output=True)
+
+            if not version.stdout.startswith('tamarin-prover ' + TAMARIN_VERSION):
+                print('ERROR: You are not using the release version ' + TAMARIN_VERSION + '. Make sure to test your submission against the release version ' + TAMARIN_VERSION + ' before submission. ')
+                errors = True
+
+            # test that the skeleton is contained in the submission. 
+            # This is sensitive to comments. Instruct the students to not add comments in the skeleton part.
+            theory_name = ''
+            for line in  open(submission_path).readlines():
+                m = re.match(THEORY_SPTHY_REGEX, line)
+                if m:
+                    theory_name = m.group(1)
+                    break
+            
+            if os.path.exists(submission_path):
+                    theory_file_open = open(submission_path)
+                    theory_text = theory_file_open.read()
+                    
+                    if theory_name in skeletons:
+                        for section in skeletons[theory_name]:
+                            #check, if the section is in the student's solution		
+                            if "".join(section.split()) not in "".join(theory_text.split()):
+                                    if not errors:
+                                        print("ERROR: The skeleton is not contained in your submission. Make sure that you do not change the sections marked with Do not Change. There is a change in the following section: " + section + " ")
+                                        errors = True
+                    else:
+                        print("ERROR: No skeleton is matching. Make sure you did not change the theory name. ")
+                        print(theory_name)
+                        errors = True
+            
+            #Check that we do not get warnings from Tamarin
+            tamarin_output = subprocess.run([tamarin_path, submission_path], text=True, capture_output=True)
+
+            #Warnings are in stout, errors in stderr
+            #However, the new Tamarin release also outputs some "[Saturating Sources] Step 1/5". Thus: check if "summary of summaries is present"
+
+            if (not ("summary of summaries:" in tamarin_output.stdout )) and tamarin_output.stderr:
+                print("ERROR: Opening your submission with Tamarin results in an error. Make sure to resolve those errors before hand-in. ")
+                errors = True
+            elif "WARNING: the following wellformedness checks failed!" in tamarin_output.stdout:
+                print("ERROR: Opening your submission with Tamarin results in failing wellformedness checks. Make sure to resolve those warnings before hand-in. ")
+                errors = True
+            elif "Warning" in tamarin_output.stdout:
+                print("ERROR: Opening your submission with Tamarin results in a Warning. Make sure to resolve those warnings before hand-in. ")
+
+            if not errors:
+                print('SUCCESS: You passed all the base line tests. You may submit your theory. ')

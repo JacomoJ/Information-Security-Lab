@@ -1,0 +1,184 @@
+theory Protocol3
+begin
+
+/* ----------------- */
+/* Equational theory */
+/* ----------------- */
+
+/* Load the built-in encryption theories */
+//Do not change the following two lines, i.e. do not add, change or remove anything (not even comments) in the following two lines.
+functions: f/2
+builtins: asymmetric-encryption, symmetric-encryption, hashing 
+
+
+
+/* -------------- */
+/* Public Key rules */
+/* -------------- */
+
+/* The following rule should be annotated by the following action facts: 
+- PubKey($A, ~skA)
+*/
+rule PubKey:  
+  [ Fr(~skX) ]
+--[ PubKey($X, ~skX) ]->
+  [ !Ltk($X, ~skX),
+    !Pk($X, pk(~skX)),
+    Out(pk(~skX)) ]
+
+/* The following rule should be annotated by the following action facts: 
+- RevealKey($A, ~skA)
+*/
+//un-comment the following line for Task 1.6
+rule RevealKey:
+  [ !Ltk($A, skA) ]
+--[ RevealKey($A, skA) ]->
+  [ Out(skA) ]
+
+
+
+/* -------------- */
+/* Protocol rules */
+/* -------------- */
+
+/* The following rule should be annotated by the following action facts: 
+- AliceSendsKey($A, $B, ~skA, pkB, ~Na)
+*/
+rule AliceSendsKey:
+  [ Fr(~Na), 
+    !Ltk($A, ~skA), // Lookup own sk
+    !Pk($B, pkB) ] // Lookup B's pk
+--[ AliceSendsKey($A, $B, ~skA, pkB, ~Na),
+    SecretA(~Na),
+    Honest($A), Honest($B) ]-> 
+  [ Out(<$A, aenc(~Na, pkB)>),
+    A_sent_1(~Na) ]
+
+/* The following rule should be annotated by the following action facts: 
+- BobReceivesKey($B, $A, ~skB, pkA, ~Nb, Na)
+*/
+rule BobReceivesKey:
+  [ Fr(~Nb),
+    !Ltk($B, ~skB),
+    !Pk($A, pkA),
+    In(aenc(Na, pk(~skB))) ]
+--[ BobReceivesKey($B, $A, ~skB, pkA, ~Nb, Na),
+    SecretB(<~Nb, f(Na, ~Nb)>),
+    RunningB($B, $A, <~Nb, Na, f(Na, ~Nb)>),
+    Honest($A), Honest($B) ]->
+  [ B_recv_1($A, aenc(Na, pk(~skB))), 
+    !Kab($A, $B, f(Na, ~Nb)),
+    Out(aenc(<~Nb, f(Na, ~Nb)>, pkA)),
+    B_sent_1(~Nb, f(Na, ~Nb)) ]
+
+/* The following rule should be annotated by the following action facts: 
+- AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, kAB)
+*/
+rule AliceReceivesNb:
+  [ !Ltk($A, ~skA), 
+    !Pk($B, pkB), 
+    A_sent_1(~Na),
+    In(aenc(<Nb, kAB>, pk(~skA))), 
+    !Kab($A, $B, kAB),
+    Fr(~ma) ]
+--[ AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, kAB),
+    Eq(kAB, f(~Na, Nb)),
+    SecretA(<~ma, h(Nb)>),
+    RunningA($A, $B, <~Na, Nb, kAB>),
+    Honest($A), Honest($B) ]->
+  [ A_recv_1(aenc(<Nb, kAB>, pk(~skA))), 
+    Out(senc(<~ma, h(Nb)>, kAB)),
+    A_sent_2(senc(<~ma, h(Nb)>, kAB)) ]
+
+/* The following rule should be annotated by the following action facts: 
+- BobReceivesMa($B, $A, ~skB, ~Nb, Na, Kab, ~mb, ma)
+*/
+rule BobReceivesMa:
+  [ B_sent_1(~Nb, kAB),
+    B_recv_1($A, aenc(Na, pk(~skB))), 
+    In(senc(<ma, Nb_h>, kAB)),
+    !Kab($A, $B, kAB), 
+    !Ltk($B, ~skB),
+    !Pk($A, pkA),
+    Fr(~mb) ]
+--[ BobReceivesMa($B, $A, ~skB, ~Nb, Na, kAB, ~mb, ma),
+    Eq(Nb_h, h(~Nb)),
+    FinishedB($B, $A, ma, ~mb),
+    SecretB(<~mb, h(Na)>),
+    CommitB($B, $A, <Na, ~Nb, kAB>),
+    Honest($A), Honest($B) ]->
+  [ Out(senc(<~mb, h(Na)>, kAB)),
+    B_sent_2(~mb, h(Na)),
+    B_recv_2(senc(<ma, Nb_h>, kAB)) ]
+
+/* The following rule should be annotated by the following action facts: 
+- AliceReceivesMb($A, $B, ~skA, ~Na, ~ma, Kab)
+*/
+rule AliceReceivesMb:
+  [ !Kab($A, $B, kAB),
+    !Ltk($A, ~skA), 
+    A_sent_1(~Na),
+    A_recv_1(aenc(<Nb, kAB>, pk(~skA))),
+    A_sent_2(senc(<~ma, h(Nb)>, kAB)),
+    In(senc(<mb, Na_h>, kAB)),
+    !Pk($B, pkB) ] 
+--[ AliceReceivesMb($A, $B, ~skA, ~Na, ~ma, kAB),
+    Eq(Na_h, h(~Na)),
+    FinishedA($A, $B, ~ma, mb),
+    CommitA($A, $B, <Nb, ~Na, kAB>) ]->
+  [ A_recv_2(senc(<mb, Na_h>, kAB)) ]
+
+
+
+/* Restrictions*/
+//You can un-comment these lines if you want to use this restriction to check equality
+restriction Equality:
+ "All x y #i. Eq(x,y) @i ==> x = y"
+
+
+/* ---------- */
+/* Properties */
+/* ---------- */
+
+
+/* Executability check: */
+//Make sure to add the action facts referred to by this lemma in your model
+//Do not change this lemma, i.e. do not add, change or remove anything (not even comments) in the following three lines.
+lemma executable:
+exists-trace 
+"Ex #i #j A B ma mb. FinishedA(A, B, ma, mb)@i & FinishedB(B,A,ma,mb)@j& not (A=B)"
+
+//un-comment following line for Task 1.5
+lemma secrecyA:
+all-traces
+"All m #i. SecretA(m)@i ==> (not (Ex #j. K(m)@j)) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+/*FILL IN HERE: 
+You may only use the action facts SecretA, SecretB, K, Honest,
+and Reveal to formulate this lemma.*/
+
+// un-comment following line for Task 1.5
+lemma secrecyB:
+all-traces
+"All m #i. SecretB(m)@i ==> (not (Ex #j. K(m)@j)) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+/*FILL IN HERE: 
+You may only use the action facts SecretA, SecretB, K, Honest,
+and Reveal to formulate this lemma.*/
+
+//un-comment following line for Task 1.5
+lemma non_injectiveA:
+all-traces
+"All A B m #i. CommitA(A, B, h(m))@i ==> (Ex #j. RunningB(B, A, m)@j) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+/*FILL IN HERE: 
+You may only use the action facts CommitA, CommitB, RunningA, RunningB, Honest,
+and Reveal to formulate this lemma.*/
+
+//un-comment following line for Task 1.5
+lemma non_injectiveB:
+all-traces
+"All A B m #i. CommitB(B, A, h(m))@i ==> (Ex #j. RunningA(A, B, m)@j) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+/*FILL IN HERE: 
+You may only use the action facts CommitA, CommitB, RunningA, RunningB, Honest,
+and Reveal to formulate this lemma.*/
+
+
+end

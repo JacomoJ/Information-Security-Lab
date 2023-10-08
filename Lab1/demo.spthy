@@ -1,0 +1,49 @@
+theory DiffieHellman
+begin
+/* Unsigned Diffie-Hellman protocol:
+   A -> B : A, g^x  (x fresh)
+   B -> A : B, g^y  (y fresh) 
+   A and B compute shared key g^(x*y)     */
+
+builtins: diffie-hellman
+
+rule A_sends:
+[Fr(~x)]
+-->
+[Out(<$A, 'g'^~x>), A_sent($A, $B, ~x)] // To note the fact that AliceSent something
+// you cannot have anything in the conclusion that does not appear in the promise except the constants
+
+rule B_recv:
+[In(<$A, gX>), Fr(~y)]
+--[SecretB($A, $B, gX^~y), FinishedB($B,gX^~y), Neq(gX, DH_neutral), Neq(gX, 'g')]->
+[Out(<$B, 'g'^~y>), B_recv($B, ~y, gX)]
+
+rule A_recv:
+[A_sent($A, $B, ~x), In(<$B, gY>)]
+--[SecretA($A, $B, gY^~x), FinishedA($A, gY^~x) , Neq(gY, DH_neutral), Neq(gY, 'g') ]->
+[A_recv($A, ~x, gY)]
+
+// both are valid formulations of inequality restriction:
+
+//restriction inequality: 
+//"All #i x. Neq(x,x)@#i ==> F"
+
+restriction inequalityv2:
+"All #i x y. Neq(x,y)@#i ==> not (x = y)"
+
+/* Executability checks */
+lemma executability:
+exists-trace "Ex #i B k #j A. FinishedB(B, k)@#i & FinishedA(A, k)@#j
+"
+/* Security properties: */
+/* Key secrecy */
+
+lemma keysecrecyA:
+"All #i A B k.  SecretA(A, B,k)@#i ==> not (Ex #j. K(k)@#j )"
+
+lemma keysecrecyB:
+"All #i A B k.  SecretB(A, B,k)@#i ==> not (Ex #j. K(k)@#j )"
+end
+
+
+
