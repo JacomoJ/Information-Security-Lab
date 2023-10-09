@@ -49,8 +49,7 @@ rule AliceSendsKey:
     !Ltk($A, ~skA), // Lookup own sk
     !Pk($B, pkB) ] // Lookup B's pk
 --[ AliceSendsKey($A, $B, ~skA, pkB, ~Na),
-    SecretA(~Na),
-    Honest($A), Honest($B) ]-> 
+    SecretA(~Na) ]-> 
   [ Out(<$A, aenc(~Na, pkB)>),
     A_sent_1(~Na) ]
 
@@ -65,7 +64,7 @@ rule BobReceivesKey:
 --[ BobReceivesKey($B, $A, ~skB, pkA, ~Nb, Na),
     SecretB(<~Nb, f(Na, ~Nb)>),
     RunningB($B, $A, <~Nb, Na, f(Na, ~Nb)>),
-    Honest($A), Honest($B) ]->
+    Honest($B), Honest($A) ]->
   [ B_recv_1($A, aenc(Na, pk(~skB))), 
     !Kab($A, $B, f(Na, ~Nb)),
     Out(aenc(<~Nb, f(Na, ~Nb)>, pkA)),
@@ -85,7 +84,7 @@ rule AliceReceivesNb:
     Eq(kAB, f(~Na, Nb)),
     SecretA(<~ma, h(Nb)>),
     RunningA($A, $B, <~Na, Nb, kAB>),
-    Honest($A), Honest($B) ]->
+    Honest($B), Honest($A) ]->
   [ A_recv_1(aenc(<Nb, kAB>, pk(~skA))), 
     Out(senc(<~ma, h(Nb)>, kAB)),
     A_sent_2(senc(<~ma, h(Nb)>, kAB)) ]
@@ -125,7 +124,8 @@ rule AliceReceivesMb:
 --[ AliceReceivesMb($A, $B, ~skA, ~Na, ~ma, kAB),
     Eq(Na_h, h(~Na)),
     FinishedA($A, $B, ~ma, mb),
-    CommitA($A, $B, <Nb, ~Na, kAB>) ]->
+    CommitA($A, $B, <Nb, ~Na, kAB>),
+    Honest($B), Honest($A) ]->
   [ A_recv_2(senc(<mb, Na_h>, kAB)) ]
 
 
@@ -167,7 +167,7 @@ and Reveal to formulate this lemma.*/
 //un-comment following line for Task 1.5
 lemma non_injectiveA:
 all-traces
-"All A B m #i. CommitA(A, B, h(m))@i ==> (Ex #j. RunningB(B, A, m)@j) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+"All A B m #i. CommitA(A, B, m)@i ==> (Ex #j. RunningB(B, A, m)@j) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
 /*FILL IN HERE: 
 You may only use the action facts CommitA, CommitB, RunningA, RunningB, Honest,
 and Reveal to formulate this lemma.*/
@@ -175,7 +175,7 @@ and Reveal to formulate this lemma.*/
 //un-comment following line for Task 1.5
 lemma non_injectiveB:
 all-traces
-"All A B m #i. CommitB(B, A, h(m))@i ==> (Ex #j. RunningA(A, B, m)@j) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+"All A B m #i. CommitB(B, A, m)@i ==> (Ex #j. RunningA(A, B, m)@j) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
 /*FILL IN HERE: 
 You may only use the action facts CommitA, CommitB, RunningA, RunningB, Honest,
 and Reveal to formulate this lemma.*/
