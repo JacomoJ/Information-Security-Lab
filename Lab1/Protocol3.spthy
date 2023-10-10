@@ -17,10 +17,10 @@ builtins: asymmetric-encryption, symmetric-encryption, hashing
 /* -------------- */
 
 /* The following rule should be annotated by the following action facts: 
-- PubKey($A, ~skA)
+- PubKey($A, ~ska)
 */
 rule PubKey:  
-  [ Fr(~skX) ]
+[ Fr(~skX) ]
 --[ PubKey($X, ~skX) ]->
   [ !Ltk($X, ~skX),
     !Pk($X, pk(~skX)),
@@ -30,11 +30,11 @@ rule PubKey:
 - RevealKey($A, ~skA)
 */
 //un-comment the following line for Task 1.6
+//rule RevealKey:
 rule RevealKey:
   [ !Ltk($A, skA) ]
 --[ RevealKey($A, skA) ]->
   [ Out(skA) ]
-
 
 
 /* -------------- */
@@ -48,10 +48,9 @@ rule AliceSendsKey:
   [ Fr(~Na), 
     !Ltk($A, ~skA), // Lookup own sk
     !Pk($B, pkB) ] // Lookup B's pk
---[ AliceSendsKey($A, $B, ~skA, pkB, ~Na),
-    SecretA(~Na) ]-> 
+--[ AliceSendsKey($A, $B, ~skA, pkB, ~Na) ]->
   [ Out(<$A, aenc(~Na, pkB)>),
-    A_sent_1(~Na) ]
+    AliceSendsKey($A, $B, ~skA, pkB, ~Na) ]
 
 /* The following rule should be annotated by the following action facts: 
 - BobReceivesKey($B, $A, ~skB, pkA, ~Nb, Na)
@@ -61,72 +60,56 @@ rule BobReceivesKey:
     !Ltk($B, ~skB),
     !Pk($A, pkA),
     In(aenc(Na, pk(~skB))) ]
---[ BobReceivesKey($B, $A, ~skB, pkA, ~Nb, Na),
-    SecretB(<~Nb, f(Na, ~Nb)>),
-    RunningB($B, $A, <~Nb, Na, f(Na, ~Nb)>),
-    Honest($B), Honest($A) ]->
-  [ B_recv_1($A, aenc(Na, pk(~skB))), 
-    !Kab($A, $B, f(Na, ~Nb)),
+--[ BobReceivesKey($B, $A, ~skB, pkA, ~Nb, Na) ]->
+  [ BobReceivesKey($B, $A, ~skB, pkA, ~Nb, Na),
     Out(aenc(<~Nb, f(Na, ~Nb)>, pkA)),
-    B_sent_1(~Nb, f(Na, ~Nb)) ]
+    !Kab($A, $B, f(Na, ~Nb)) ]
 
 /* The following rule should be annotated by the following action facts: 
-- AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, kAB)
+- AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, Kab)
 */
 rule AliceReceivesNb:
-  [ !Ltk($A, ~skA), 
-    !Pk($B, pkB), 
-    A_sent_1(~Na),
-    In(aenc(<Nb, kAB>, pk(~skA))), 
-    !Kab($A, $B, kAB),
+  [ In(aenc(<Nb, Kab>, pk(~skA))), 
+    AliceSendsKey($A, $B, ~skA, pkB, ~Na),
     Fr(~ma) ]
---[ AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, kAB),
-    Eq(kAB, f(~Na, Nb)),
-    SecretA(<~ma, h(Nb)>),
-    RunningA($A, $B, <~Na, Nb, kAB>),
+--[ AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, Kab),
+    Eq(Kab, f(~Na, Nb)),
+    RunningA($A, $B, ~ma),
     Honest($B), Honest($A) ]->
-  [ A_recv_1(aenc(<Nb, kAB>, pk(~skA))), 
-    Out(senc(<~ma, h(Nb)>, kAB)),
-    A_sent_2(senc(<~ma, h(Nb)>, kAB)) ]
+  [ AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, Kab),
+    Out(senc(<~ma, h(Nb)>, Kab)) ]
 
 /* The following rule should be annotated by the following action facts: 
 - BobReceivesMa($B, $A, ~skB, ~Nb, Na, Kab, ~mb, ma)
 */
 rule BobReceivesMa:
-  [ B_sent_1(~Nb, kAB),
-    B_recv_1($A, aenc(Na, pk(~skB))), 
-    In(senc(<ma, Nb_h>, kAB)),
-    !Kab($A, $B, kAB), 
-    !Ltk($B, ~skB),
-    !Pk($A, pkA),
+  [ In(senc(<ma, Nb_h>, Kab)),
+    BobReceivesKey($B, $A, ~skB, pkA, ~Nb, Na),
+    !Kab($A, $B, Kab),
     Fr(~mb) ]
---[ BobReceivesMa($B, $A, ~skB, ~Nb, Na, kAB, ~mb, ma),
+--[ BobReceivesMa($B, $A, ~skB, ~Nb, Na, Kab, ~mb, ma),
     Eq(Nb_h, h(~Nb)),
     FinishedB($B, $A, ma, ~mb),
-    SecretB(<~mb, h(Na)>),
-    CommitB($B, $A, <Na, ~Nb, kAB>),
+    SecretB(~mb),
+    CommitB($B, $A, ma),
+    RunningB($B, $A, ~mb),
     Honest($A), Honest($B) ]->
-  [ Out(senc(<~mb, h(Na)>, kAB)),
-    B_sent_2(~mb, h(Na)),
-    B_recv_2(senc(<ma, Nb_h>, kAB)) ]
+  [ Out(senc(<~mb, h(Na)>, Kab)),
+    BobReceivesMa($B, $A, ~skB, ~Nb, Na, Kab, ~mb, ma) ]
 
 /* The following rule should be annotated by the following action facts: 
 - AliceReceivesMb($A, $B, ~skA, ~Na, ~ma, Kab)
 */
 rule AliceReceivesMb:
-  [ !Kab($A, $B, kAB),
-    !Ltk($A, ~skA), 
-    A_sent_1(~Na),
-    A_recv_1(aenc(<Nb, kAB>, pk(~skA))),
-    A_sent_2(senc(<~ma, h(Nb)>, kAB)),
-    In(senc(<mb, Na_h>, kAB)),
-    !Pk($B, pkB) ] 
---[ AliceReceivesMb($A, $B, ~skA, ~Na, ~ma, kAB),
+  [ AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, Kab),
+    In(senc(<mb, Na_h>, Kab)) ] 
+--[ AliceReceivesMb($A, $B, ~skA, ~Na, ~ma, Kab),
     Eq(Na_h, h(~Na)),
+    SecretA(~ma),
     FinishedA($A, $B, ~ma, mb),
-    CommitA($A, $B, <Nb, ~Na, kAB>),
+    CommitA($A, $B, mb),
     Honest($B), Honest($A) ]->
-  [ A_recv_2(senc(<mb, Na_h>, kAB)) ]
+  [ AliceReceivesMb($A, $B, ~skA, ~Na, ~ma, Kab) ]
 
 
 
