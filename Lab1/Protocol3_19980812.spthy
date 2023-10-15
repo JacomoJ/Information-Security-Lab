@@ -33,7 +33,7 @@ rule PubKey:
 //rule RevealKey:
 rule RevealKey:
   [ !Ltk($A, skA) ]
---[ RevealKey($A, skA) ]->
+--[ RevealKey($A, skA), Reveal($A) ]->
   [ Out(skA) ]
 
 
@@ -74,8 +74,7 @@ rule AliceReceivesNb:
     Fr(~ma) ]
 --[ AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, Kab),
     Eq(Kab, f(~Na, Nb)),
-    RunningA($A, $B, ~ma),
-    Honest($B), Honest($A) ]->
+    RunningA($A, $B, ~ma) ]->
   [ AliceReceivesNb($A, $B, ~skA, ~Na, Nb, ~ma, Kab),
     Out(senc(<~ma, h(Nb)>, Kab)) ]
 
@@ -109,7 +108,7 @@ rule AliceReceivesMb:
     FinishedA($A, $B, ~ma, mb),
     CommitA($A, $B, mb),
     Honest($B), Honest($A) ]->
-  [ AliceReceivesMb($A, $B, ~skA, ~Na, ~ma, Kab) ]
+  [ ]
 
 
 
@@ -134,7 +133,7 @@ exists-trace
 //un-comment following line for Task 1.5
 lemma secrecyA:
 all-traces
-"All m #i. SecretA(m)@i ==> (not (Ex #j. K(m)@j)) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+"All m #i. SecretA(m)@i ==> (not (Ex #j. K(m)@j)) | (Ex C #r. Reveal(C)@r & Honest(C)@i)"
 /*FILL IN HERE: 
 You may only use the action facts SecretA, SecretB, K, Honest,
 and Reveal to formulate this lemma.*/
@@ -142,7 +141,7 @@ and Reveal to formulate this lemma.*/
 // un-comment following line for Task 1.5
 lemma secrecyB:
 all-traces
-"All m #i. SecretB(m)@i ==> (not (Ex #j. K(m)@j)) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+"All m #i. SecretB(m)@i ==> (not (Ex #j. K(m)@j)) | (Ex C #r. Reveal(C)@r & Honest(C)@i)"
 /*FILL IN HERE: 
 You may only use the action facts SecretA, SecretB, K, Honest,
 and Reveal to formulate this lemma.*/
@@ -150,7 +149,7 @@ and Reveal to formulate this lemma.*/
 //un-comment following line for Task 1.5
 lemma non_injectiveA:
 all-traces
-"All A B m #i. CommitA(A, B, m)@i ==> (Ex #j. RunningB(B, A, m)@j) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+"All A B m #i. CommitA(A, B, m)@i ==> (Ex #j. RunningB(B, A, m)@j) | (Ex C #r. Reveal(C)@r & Honest(C)@i)"
 /*FILL IN HERE: 
 You may only use the action facts CommitA, CommitB, RunningA, RunningB, Honest,
 and Reveal to formulate this lemma.*/
@@ -158,7 +157,7 @@ and Reveal to formulate this lemma.*/
 //un-comment following line for Task 1.5
 lemma non_injectiveB:
 all-traces
-"All A B m #i. CommitB(B, A, m)@i ==> (Ex #j. RunningA(A, B, m)@j) | (Ex C k #r. RevealKey(C, k)@r & Honest(C)@i)"
+"All A B m #i. CommitB(B, A, m)@i ==> (Ex #j. RunningA(A, B, m)@j) | (Ex C #r. Reveal(C)@r & Honest(C)@i)"
 /*FILL IN HERE: 
 You may only use the action facts CommitA, CommitB, RunningA, RunningB, Honest,
 and Reveal to formulate this lemma.*/

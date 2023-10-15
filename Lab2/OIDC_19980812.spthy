@@ -356,9 +356,11 @@ all-traces
 RP_gets_IDToken_for_username(RP, username, IdP)@i & 
 (not (Ex #j. Compromised(IdP)@j)) 
 ==>
-(Ex #l #j User. User_gives_consent(User, RP, IdP)@l &
+(Ex #l #j User. 
+    User_gives_consent(User, RP, IdP)@l &
     Username_belongs_to(username, User, IdP)@j &
-    #l < #i)" // earlier
+    #l < #i &
+    #j < #l)" 
 
 //An RP $RP logs a user in via Direct Login with a certain username, only if this user is the actual owner of the username for that RP.
 //un-comment following line for Task 1.2
@@ -367,8 +369,9 @@ all-traces
 "All RP User username #i. 
 RP_Logs_User_in_Direct(RP, User, username)@i 
 ==>
-Ex #j. Username_belongs_to(username, User, RP)@j &   
-j < i"
+(Ex #j. 
+    Username_belongs_to(username, User, RP)@j &   
+    #j < #i)"
 
 //An RP logs a user in with a username received in a valid ID Token from a non-compromised $IdP, only if the user is the actual owner of the username username with that IdP.
 //un-comment following line for Task 1.2
@@ -379,16 +382,17 @@ RP_Logs_User_in_OIDC(RP, User, username, IdP)@i &
 RP_gets_IDToken_for_username(RP, username, IdP)@i &
 (not (Ex #k. Compromised(IdP)@k))
 ==>
-(Ex #j. Username_belongs_to(username, User, IdP)@j)
+(Ex #j. 
+    Username_belongs_to(username, User, IdP)@j & 
+    #j < #i)
 "
 
 // If a RP receives valid credentials (i.e. username and password pair) for user $User, it cannot validate the same credentials from different User $User2.
 //un-comment following line for Task 1.2
 lemma Unique_Credentials [heuristic = S] :
 all-traces
-"All RP User username #i #j.
-RP_accepts_credentials(RP, username)@i &
-Username_belongs_to(username, User, RP)@j
+"All RP User username #i.
+RP_Logs_User_in_Direct(RP, User, username)@i
 ==>
 (not (Ex User2 #k.
     RP_Logs_User_in_Direct(RP, User2, username)@k &
@@ -404,6 +408,7 @@ all-traces
 RP_gets_IDToken_for_user(RP, User, id_token, IdP)@i &
 (not (Ex #k. Compromised(IdP)@k)) 
 ==>
-(not (Ex User2 #j. RP_gets_IDToken_for_user(RP, User2, id_token, IdP)@j & 
-(not User = User2)))"
+(not (Ex User2 #j. 
+    RP_gets_IDToken_for_user(RP, User2, id_token, IdP)@j & 
+    (not User = User2)))"
 end
